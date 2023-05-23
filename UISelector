@@ -1,7 +1,7 @@
 import org.openqa.selenium.By;
 import io.appium.java_client.MobileBy;
 
-public class XPathConverter {
+public class XPathToUiSelectorConverter {
 
     public static String convertToUiSelector(String xpathExpression) {
         By by = By.xpath(xpathExpression);
@@ -10,18 +10,6 @@ public class XPathConverter {
         String uiSelectorExpression = processXPath(by, uiSelector);
 
         return uiSelectorExpression;
-    }
-
-    public static String convertToiOSClassChain(String xpathExpression) {
-        String classChainExpression = processXPath(xpathExpression);
-
-        return classChainExpression;
-    }
-
-    public static String convertToiOSPredicate(String xpathExpression) {
-        String predicateExpression = processXPath(xpathExpression);
-
-        return predicateExpression;
     }
 
     private static String processXPath(By by, MobileBy.ByAndroidUIAutomator uiSelector) {
@@ -84,95 +72,45 @@ public class XPathConverter {
     }
 
     private static String parseEqualityCondition(String elementName, String condition) {
-        StringBuilder conditionExpression = new StringBuilder();
+        String attributeName = condition.substring(0, condition.indexOf('=')).trim();
+        String attributeValue = condition.substring(condition.indexOf('=') + 1, condition.length()).trim().replaceAll("[\"'()]", "");
 
-        int indexStartIndex = elementName.indexOf('[');
-        int indexEndIndex = elementName.indexOf(']');
-        if (indexStartIndex != -1 && indexEndIndex != -1) {
-            String indexValue = elementName.substring(indexStartIndex + 1, indexEndIndex).trim();
-            elementName = elementName.substring(0, indexStartIndex).trim();
-            conditionExpression.append(parseElementName(elementName));
-            conditionExpression.append(String.format(".index(%s)", indexValue));
-        } else {
-            conditionExpression.append(parseElementName(elementName));
-        }
-
-        conditionExpression.append(parseAttribute(condition));
-
-        return conditionExpression.toString();
+        return String.format("new UiSelector().%s(\"%s\")", attributeName, attributeValue);
     }
 
     private static String parseContainsCondition(String elementName, String condition) {
-        StringBuilder conditionExpression = new StringBuilder();
+        String attributeName = condition.substring(0, condition.indexOf("contains")).trim();
+        String attributeValue = condition.substring(condition.indexOf(',') + 1, condition.length() - 1).trim().replaceAll("[\"'()]", "");
 
-        int indexStartIndex = elementName.indexOf('[');
-        int indexEndIndex = elementName.indexOf(']');
-        if (indexStartIndex != -1 && indexEndIndex != -1) {
-            String indexValue = elementName.substring(indexStartIndex + 1, indexEndIndex).trim();
-            elementName = elementName.substring(0, indexStartIndex).trim();
-            conditionExpression.append(parseElementName(elementName));
-            conditionExpression.append(String.format(".index(%s)", indexValue));
-        } else {
-            conditionExpression.append(parseElementName(elementName));
-        }
-
-        conditionExpression.append(parseContainsAttribute(condition));
-
-        return conditionExpression.toString();
-    }
-
-    private static String parseAttribute(String attribute) {
-        StringBuilder attributeExpression = new StringBuilder();
-
-        String attributeName = attribute.substring(0, attribute.indexOf('=')).trim();
-        String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length()).trim().replaceAll("[\"'()]", "");
-        attributeExpression.append(String.format(".%s(\"%s\")", attributeName, attributeValue));
-
-        return attributeExpression.toString();
-    }
-
-    private static String parseContainsAttribute(String attribute) {
-        StringBuilder attributeExpression = new StringBuilder();
-
-        String attributeName = attribute.substring(0, attribute.indexOf('=')).trim();
-        String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length()).trim().replaceAll("[\"'()]", "");
-        attributeExpression.append(String.format(".%sContains(\"%s\")", attributeName, attributeValue));
-
-        return attributeExpression.toString();
+        return String.format("new UiSelector().%sContains(\"%s\")", attributeName, attributeValue);
     }
 
     private static String parseAxis(String axisName) {
         switch (axisName) {
             case "ancestor":
-                return ".fromParent()";
+                return ".fromParent(";
             case "parent":
-                return ".fromParent()";
+                return ".fromParent(";
             case "following-sibling":
-                return ".fromSibling()";
+                return ".fromSibling(";
             case "preceding-sibling":
-                return ".fromSibling()";
+                return ".fromSibling(";
             case "following":
-                return ".fromDescendant()";
+                return ".fromDescendant(";
             case "preceding":
-                return ".fromDescendant()";
+                return ".fromDescendant(";
             case "child":
-                return ".childSelector()";
+                return ".childSelector(";
             case "descendant":
-                return ".fromDescendant()";
+                return ".fromDescendant(";
             default:
                 return "";
         }
     }
 
     public static void main(String[] args) {
-        String xpathExpression = "//ancestor::XCUIElementTypeButton[@name=\"buttonName\" or contains(@label,\"buttonLabel\")]/child::XCUIElementTypeLabel[2]";
+        String xpathExpression = "//ancestor::android.widget[@text=\"muffin\" or contains[@text,\"waffle\"]/following::another.widget[@resource-id=\"toddler\"]";
         String uiSelectorExpression = convertToUiSelector(xpathExpression);
-        System.out.println("UiSelector: " + uiSelectorExpression);
-
-        String classChainExpression = convertToiOSClassChain(xpathExpression);
-        System.out.println("iOS Class Chain: " + classChainExpression);
-
-        String predicateExpression = convertToiOSPredicate(xpathExpression);
-        System.out.println("iOS Predicate: " + predicateExpression);
+        System.out.println(uiSelectorExpression);
     }
 }
