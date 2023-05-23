@@ -1,0 +1,154 @@
+import io.appium.java_client.MobileBy;
+import org.openqa.selenium.By;
+
+public class XPathToUiSelectorConverter {
+
+    public static String convertToUiSelector(String xpathExpression) {
+        By by = By.xpath(xpathExpression);
+        MobileBy.ByAndroidUIAutomator uiSelector = (MobileBy.ByAndroidUIAutomator) MobileBy.byAndroidUIAutomator("new UiSelector().resourceId(\"dummy\")");
+
+        String uiSelectorExpression = processXPath(by, uiSelector);
+
+        return uiSelectorExpression;
+    }
+
+    private static String processXPath(By by, MobileBy.ByAndroidUIAutomator uiSelector) {
+        if (by instanceof By.ByXPath) {
+            String xpath = by.toString();
+            int start = xpath.indexOf("//");
+            int end = xpath.lastIndexOf("]");
+            String selectorExpression = xpath.substring(start, end);
+            return parseXPath(selectorExpression, uiSelector);
+        }
+        return null;
+    }
+
+    private static String parseXPath(String xpath, MobileBy.ByAndroidUIAutomator uiSelector) {
+        StringBuilder uiSelectorExpression = new StringBuilder();
+
+        String[] parts = xpath.split("\\s*/\\s*");
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i];
+            if (part.contains("[")) {
+                int openBracketIndex = part.indexOf('[');
+                String elementName = part.substring(0, openBracketIndex);
+                String condition = part.substring(openBracketIndex + 1, part.length() - 1);
+                uiSelectorExpression.append(".childSelector(");
+
+                if (condition.contains(" or ")) {
+                    String[] orConditions = condition.split(" or ");
+                    uiSelectorExpression.append(parseOrConditions(elementName, orConditions, uiSelector));
+                } else {
+                    uiSelectorExpression.append(parseEqualityCondition(elementName, condition));
+                }
+                uiSelectorExpression.append(")");
+            } else {
+                uiSelectorExpression.append(".childSelector(");
+                uiSelectorExpression.append(parseElementName(part));
+                uiSelectorExpression.append(")");
+            }
+        }
+
+        return uiSelectorExpression.toString();
+    }
+
+    private static String parseOrConditions(String elementName, String[] orConditions, MobileBy.ByAndroidUIAutomator uiSelector) {
+        StringBuilder orExpression = new StringBuilder();
+
+        for (String condition : orConditions) {
+            String uiSelectorExpression = parseEqualityCondition(elementName, condition);
+            if (validateUiSelector(uiSelectorExpression, uiSelector)) {
+                return uiSelectorExpression;
+            }
+        }
+
+        return orExpression.toString();
+    }
+
+    private static String parseEqualityCondition(String elementName, String condition) {
+        StringBuilder conditionExpression = new StringBuilder();
+
+        int indexStartIndex = elementName.indexOf('[');
+        int indexEndIndex = elementName.indexOf(']');
+        if (indexStartIndex != -1 && indexEndIndex != -1) {
+            String indexValue = elementName.substring(indexStartIndex + 1, indexEndIndex).trim();
+            elementName = elementName.substring(0, indexStartIndex).trim();
+            conditionExpression.append(parseElementName(elementName));
+            conditionExpression.append(String.format(".index(%s)", indexValue));
+        } else {
+            conditionExpression.append(parseElementName(elementName));
+        }
+
+        conditionExpression.append(parseAttribute(condition));
+
+        return conditionExpression.toString();
+    }
+
+    private static String parseAttribute(String attribute) {
+        StringBuilder attributeExpression = new StringBuilder();
+
+        String attributeName = attribute.substring(0, attribute.indexOf('=')).trim();
+        String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length()).trim().replaceAll("[\"'()]", "");
+        attributeExpression.append(String.format(".%s(\"%s\")", attributeName, attributeValue));
+
+        return attributeExpression.toString();
+    }
+
+    private static String parseElementName(String part) {
+        String[] attributes = part.split("\\[");
+        String elementName = attributes[0];
+
+        StringBuilder selector = new StringBuilder("new UiSelector()");
+        for (int i = 1; i < attributes.length; i++) {
+            String attribute = attributes[i].trim();
+            if (attribute.contains("::")) {
+                String[] axisParts = attribute.split("::");
+                String axisName = axisParts[1].trim();
+                selector.append(parseAxis(axisName));
+            } else {
+                String attributeName = attribute.substring(1, attribute.indexOf('=')).trim();
+                String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length() - 1).trim().replaceAll("[\"'()]", "");
+                selector.append(String.format(".%s(\"%s\")", attributeName, attributeValue));
+            }
+        }
+        return selector.toString();
+    }
+
+    private static String parseAxis(String axisName) {
+        switch (axisName) {
+            case "ancestor":
+                return ".fromParent()";
+            case "parent":
+                return ".fromParent()";
+            case "following-sibling":
+                return ".fromSibling()";
+            case "preceding-sibling":
+                return ".fromSibling()";
+            case "following":
+                return ".fromDescendant()";
+            case "preceding":
+                return ".fromDescendant()";
+            case "child":
+                return ".childSelector()";
+            case "descendant":
+                return ".fromDescendant()";
+            default:
+                return "";
+        }
+    }
+
+    private static boolean validateUiSelector(String uiSelectorExpression, MobileBy.ByAndroidUIAutomator uiSelector) {
+        try {
+            uiSelector.overrideSearchCriteria(uiSelectorExpression);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static void main(String[] args) {
+        String xpathExpression = "(//android.widget[@text=\"muffin\" or contains[@text,\"waffle\"]]/another.widget[@resource-id=\"toddler\"])[1]";
+        String uiSelectorExpression = convertToUiSelector(xpathExpression);
+        System.out.println("UiSelector: " + uiSelectorExpression);
+    }
+}
