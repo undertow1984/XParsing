@@ -1,7 +1,7 @@
-import io.appium.java_client.MobileBy;
 import org.openqa.selenium.By;
+import io.appium.java_client.MobileBy;
 
-public class XPathToUiSelectorConverter {
+public class XPathConverter {
 
     public static String convertToUiSelector(String xpathExpression) {
         By by = By.xpath(xpathExpression);
@@ -10,6 +10,18 @@ public class XPathToUiSelectorConverter {
         String uiSelectorExpression = processXPath(by, uiSelector);
 
         return uiSelectorExpression;
+    }
+
+    public static String convertToiOSClassChain(String xpathExpression) {
+        String classChainExpression = processXPath(xpathExpression);
+
+        return classChainExpression;
+    }
+
+    public static String convertToiOSPredicate(String xpathExpression) {
+        String predicateExpression = processXPath(xpathExpression);
+
+        return predicateExpression;
     }
 
     private static String processXPath(By by, MobileBy.ByAndroidUIAutomator uiSelector) {
@@ -35,9 +47,8 @@ public class XPathToUiSelectorConverter {
                 String condition = part.substring(openBracketIndex + 1, part.length() - 1);
                 uiSelectorExpression.append(".childSelector(");
 
-                if (condition.contains(" or ")) {
-                    String[] orConditions = condition.split(" or ");
-                    uiSelectorExpression.append(parseOrConditions(elementName, orConditions, uiSelector));
+                if (condition.contains("contains")) {
+                    uiSelectorExpression.append(parseContainsCondition(elementName, condition));
                 } else {
                     uiSelectorExpression.append(parseEqualityCondition(elementName, condition));
                 }
@@ -52,17 +63,24 @@ public class XPathToUiSelectorConverter {
         return uiSelectorExpression.toString();
     }
 
-    private static String parseOrConditions(String elementName, String[] orConditions, MobileBy.ByAndroidUIAutomator uiSelector) {
-        StringBuilder orExpression = new StringBuilder();
+    private static String parseElementName(String part) {
+        String[] attributes = part.split("\\[");
+        String elementName = attributes[0];
 
-        for (String condition : orConditions) {
-            String uiSelectorExpression = parseEqualityCondition(elementName, condition);
-            if (validateUiSelector(uiSelectorExpression, uiSelector)) {
-                return uiSelectorExpression;
+        StringBuilder selector = new StringBuilder("new UiSelector()");
+        for (int i = 1; i < attributes.length; i++) {
+            String attribute = attributes[i].trim();
+            if (attribute.contains("::")) {
+                String[] axisParts = attribute.split("::");
+                String axisName = axisParts[1].trim();
+                selector.append(parseAxis(axisName));
+            } else {
+                String attributeName = attribute.substring(1, attribute.indexOf('=')).trim();
+                String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length() - 1).trim().replaceAll("[\"'()]", "");
+                selector.append(String.format(".%s(\"%s\")", attributeName, attributeValue));
             }
         }
-
-        return orExpression.toString();
+        return selector.toString();
     }
 
     private static String parseEqualityCondition(String elementName, String condition) {
@@ -84,6 +102,25 @@ public class XPathToUiSelectorConverter {
         return conditionExpression.toString();
     }
 
+    private static String parseContainsCondition(String elementName, String condition) {
+        StringBuilder conditionExpression = new StringBuilder();
+
+        int indexStartIndex = elementName.indexOf('[');
+        int indexEndIndex = elementName.indexOf(']');
+        if (indexStartIndex != -1 && indexEndIndex != -1) {
+            String indexValue = elementName.substring(indexStartIndex + 1, indexEndIndex).trim();
+            elementName = elementName.substring(0, indexStartIndex).trim();
+            conditionExpression.append(parseElementName(elementName));
+            conditionExpression.append(String.format(".index(%s)", indexValue));
+        } else {
+            conditionExpression.append(parseElementName(elementName));
+        }
+
+        conditionExpression.append(parseContainsAttribute(condition));
+
+        return conditionExpression.toString();
+    }
+
     private static String parseAttribute(String attribute) {
         StringBuilder attributeExpression = new StringBuilder();
 
@@ -94,24 +131,14 @@ public class XPathToUiSelectorConverter {
         return attributeExpression.toString();
     }
 
-    private static String parseElementName(String part) {
-        String[] attributes = part.split("\\[");
-        String elementName = attributes[0];
+    private static String parseContainsAttribute(String attribute) {
+        StringBuilder attributeExpression = new StringBuilder();
 
-        StringBuilder selector = new StringBuilder("new UiSelector()");
-        for (int i = 1; i < attributes.length; i++) {
-            String attribute = attributes[i].trim();
-            if (attribute.contains("::")) {
-                String[] axisParts = attribute.split("::");
-                String axisName = axisParts[1].trim();
-                selector.append(parseAxis(axisName));
-            } else {
-                String attributeName = attribute.substring(1, attribute.indexOf('=')).trim();
-                String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length() - 1).trim().replaceAll("[\"'()]", "");
-                selector.append(String.format(".%s(\"%s\")", attributeName, attributeValue));
-            }
-        }
-        return selector.toString();
+        String attributeName = attribute.substring(0, attribute.indexOf('=')).trim();
+        String attributeValue = attribute.substring(attribute.indexOf('=') + 1, attribute.length()).trim().replaceAll("[\"'()]", "");
+        attributeExpression.append(String.format(".%sContains(\"%s\")", attributeName, attributeValue));
+
+        return attributeExpression.toString();
     }
 
     private static String parseAxis(String axisName) {
@@ -137,18 +164,15 @@ public class XPathToUiSelectorConverter {
         }
     }
 
-    private static boolean validateUiSelector(String uiSelectorExpression, MobileBy.ByAndroidUIAutomator uiSelector) {
-        try {
-            uiSelector.overrideSearchCriteria(uiSelectorExpression);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     public static void main(String[] args) {
-        String xpathExpression = "(//android.widget[@text=\"muffin\" or contains[@text,\"waffle\"]]/another.widget[@resource-id=\"toddler\"])[1]";
+        String xpathExpression = "//ancestor::XCUIElementTypeButton[@name=\"buttonName\" or contains(@label,\"buttonLabel\")]/child::XCUIElementTypeLabel[2]";
         String uiSelectorExpression = convertToUiSelector(xpathExpression);
         System.out.println("UiSelector: " + uiSelectorExpression);
+
+        String classChainExpression = convertToiOSClassChain(xpathExpression);
+        System.out.println("iOS Class Chain: " + classChainExpression);
+
+        String predicateExpression = convertToiOSPredicate(xpathExpression);
+        System.out.println("iOS Predicate: " + predicateExpression);
     }
 }
